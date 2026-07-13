@@ -14,7 +14,7 @@
 
 from flask import Flask, render_template_string, request, jsonify, session, redirect
 import random
-import json
+from pymongo import MongoClient
 import os
 import time
 import uuid
@@ -25,7 +25,17 @@ from datetime import datetime
 # ==========================================================================================
 app = Flask(__name__)
 app.secret_key = "yejun_ultimate_god_tier_key_2026_infinity_plus_alpha_v27_super_ultra_max"
-DB_FILE = 'ultimate_database_v27.json'
+
+# ⚠️ 여기에 본인의 MongoDB URL을 직접 넣으세요!
+MONGO_URI = "mongodb+srv://<아이디>:<비밀번호>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority" 
+
+try:
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    db_client = client['gongqn_v27_db']
+    app_state = db_client['app_state']
+    print("✅ MongoDB 클라우드 접속 성공!")
+except Exception as e:
+    print(f"❌ MongoDB 접속 실패! URI를 확인하세요: {e}")   
 
 # ==========================================================================================
 # 🗄️ [DATABASE] 강력한 데이터베이스 엔진 (자동 마이그레이션 및 무결성 검사 포함)
@@ -100,13 +110,203 @@ def load_db():
         print(f"[DB 로드 오류 발생 - 자동 복구 진행] {e}")
         return default_db
 
+def get_default_db():
+    return {
+        "users": {}, "posts": [], "notices": [], "admin_msgs": [], "coupons": {},
+        "sys_config": {
+            "roulette_cost": 500, "m1": "홈(공지)", "m2": "게시판", "m3": "룰렛", 
+            "m4": "상점", "m5": "채팅", "m6": "설정", "m7": "인벤토리",
+            "popup_notice": "환영합니다! V27 MongoDB 업데이트 완료.",
+            "r_i1": "최고급 소원권", "r_p1": 5, "r_i2": "꽝", "r_p2": 45,
+            "r_i3": "프리미엄 놀이권", "r_p3": 10, "r_i4": "꽝", "r_p4": 20,
+            "r_i5": "특별 야외권", "r_p5": 10, "r_i6": "꽝", "r_p6": 10
+        },
+        "shop_items": [], "chat_rooms": {}, "reviews": [], "transactions": [],
+        "roulette_approvals": [], "item_use_approvals": [], "friend_requests": []
+    }
+
+def load_db():
+    try:
+        doc = app_state.find_one({"_id": "MAIN_DATA"})
+        if not doc:
+            default_db = get_default_db()
+            app_state.insert_one({"_id": "MAIN_DATA", "data": default_db})
+            return default_db
+            
+        db = doc.get("data", {})
+        default_db = get_default_db()
+        needs_update = False
+        
+        for key in default_db:
+            if key not in db:
+                db[key] = default_db[key]
+                needs_update = True
+                
+        for u_id, u_data in db.get('users', {}).items():
+            if 'friends' not in u_data: 
+                u_data['friends'] = []
+                needs_update = True
+            if 'inventory' not in u_data: 
+                u_data['inventory'] = []
+                needs_update = True
+                
+        if needs_update: save_db(db)
+        return db
+    except Exception as e:
+        return get_default_db()
+
 def save_db(data):
-    """
-    데이터베이스 안전 저장 함수.
-    ensure_ascii=False 옵션을 통해 한글 깨짐을 방지하고 들여쓰기로 가독성을 높입니다.
-    """
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    try:
+        app_state.update_one({"_id": "MAIN_DATA"}, {"$set": {"data": data}}, upsert=True)
+    except Exception as e:
+        print("DB 저장 실패:", e)def get_default_db():
+    return {
+        "users": {}, "posts": [], "notices": [], "admin_msgs": [], "coupons": {},
+        "sys_config": {
+            "roulette_cost": 500, "m1": "홈(공지)", "m2": "게시판", "m3": "룰렛", 
+            "m4": "상점", "m5": "채팅", "m6": "설정", "m7": "인벤토리",
+            "popup_notice": "환영합니다! V27 MongoDB 업데이트 완료.",
+            "r_i1": "최고급 소원권", "r_p1": 5, "r_i2": "꽝", "r_p2": 45,
+            "r_i3": "프리미엄 놀이권", "r_p3": 10, "r_i4": "꽝", "r_p4": 20,
+            "r_i5": "특별 야외권", "r_p5": 10, "r_i6": "꽝", "r_p6": 10
+        },
+        "shop_items": [], "chat_rooms": {}, "reviews": [], "transactions": [],
+        "roulette_approvals": [], "item_use_approvals": [], "friend_requests": []
+    }
+
+def load_db():
+    try:
+        doc = app_state.find_one({"_id": "MAIN_DATA"})
+        if not doc:
+            default_db = get_default_db()
+            app_state.insert_one({"_id": "MAIN_DATA", "data": default_db})
+            return default_db
+            
+        db = doc.get("data", {})
+        default_db = get_default_db()
+        needs_update = False
+        
+        for key in default_db:
+            if key not in db:
+                db[key] = default_db[key]
+                needs_update = True
+                
+        for u_id, u_data in db.get('users', {}).items():
+            if 'friends' not in u_data: 
+                u_data['friends'] = []
+                needs_update = True
+            if 'inventory' not in u_data: 
+                u_data['inventory'] = []
+                needs_update = True
+                
+        if needs_update: save_db(db)
+        return db
+    except Exception as e:
+        return get_default_db()
+
+def save_db(data):
+    try:
+        app_state.update_one({"_id": "MAIN_DATA"}, {"$set": {"data": data}}, upsert=True)
+    except Exception as e:
+        print("DB 저장 실패:", e)def get_default_db():
+    return {
+        "users": {}, "posts": [], "notices": [], "admin_msgs": [], "coupons": {},
+        "sys_config": {
+            "roulette_cost": 500, "m1": "홈(공지)", "m2": "게시판", "m3": "룰렛", 
+            "m4": "상점", "m5": "채팅", "m6": "설정", "m7": "인벤토리",
+            "popup_notice": "환영합니다! V27 MongoDB 업데이트 완료.",
+            "r_i1": "최고급 소원권", "r_p1": 5, "r_i2": "꽝", "r_p2": 45,
+            "r_i3": "프리미엄 놀이권", "r_p3": 10, "r_i4": "꽝", "r_p4": 20,
+            "r_i5": "특별 야외권", "r_p5": 10, "r_i6": "꽝", "r_p6": 10
+        },
+        "shop_items": [], "chat_rooms": {}, "reviews": [], "transactions": [],
+        "roulette_approvals": [], "item_use_approvals": [], "friend_requests": []
+    }
+
+def load_db():
+    try:
+        doc = app_state.find_one({"_id": "MAIN_DATA"})
+        if not doc:
+            default_db = get_default_db()
+            app_state.insert_one({"_id": "MAIN_DATA", "data": default_db})
+            return default_db
+            
+        db = doc.get("data", {})
+        default_db = get_default_db()
+        needs_update = False
+        
+        for key in default_db:
+            if key not in db:
+                db[key] = default_db[key]
+                needs_update = True
+                
+        for u_id, u_data in db.get('users', {}).items():
+            if 'friends' not in u_data: 
+                u_data['friends'] = []
+                needs_update = True
+            if 'inventory' not in u_data: 
+                u_data['inventory'] = []
+                needs_update = True
+                
+        if needs_update: save_db(db)
+        return db
+    except Exception as e:
+        return get_default_db()
+
+def save_db(data):
+    try:
+        app_state.update_one({"_id": "MAIN_DATA"}, {"$set": {"data": data}}, upsert=True)
+    except Exception as e:
+        print("DB 저장 실패:", e)def get_default_db():
+    return {
+        "users": {}, "posts": [], "notices": [], "admin_msgs": [], "coupons": {},
+        "sys_config": {
+            "roulette_cost": 500, "m1": "홈(공지)", "m2": "게시판", "m3": "룰렛", 
+            "m4": "상점", "m5": "채팅", "m6": "설정", "m7": "인벤토리",
+            "popup_notice": "환영합니다! V27 MongoDB 업데이트 완료.",
+            "r_i1": "최고급 소원권", "r_p1": 5, "r_i2": "꽝", "r_p2": 45,
+            "r_i3": "프리미엄 놀이권", "r_p3": 10, "r_i4": "꽝", "r_p4": 20,
+            "r_i5": "특별 야외권", "r_p5": 10, "r_i6": "꽝", "r_p6": 10
+        },
+        "shop_items": [], "chat_rooms": {}, "reviews": [], "transactions": [],
+        "roulette_approvals": [], "item_use_approvals": [], "friend_requests": []
+    }
+
+def load_db():
+    try:
+        doc = app_state.find_one({"_id": "MAIN_DATA"})
+        if not doc:
+            default_db = get_default_db()
+            app_state.insert_one({"_id": "MAIN_DATA", "data": default_db})
+            return default_db
+            
+        db = doc.get("data", {})
+        default_db = get_default_db()
+        needs_update = False
+        
+        for key in default_db:
+            if key not in db:
+                db[key] = default_db[key]
+                needs_update = True
+                
+        for u_id, u_data in db.get('users', {}).items():
+            if 'friends' not in u_data: 
+                u_data['friends'] = []
+                needs_update = True
+            if 'inventory' not in u_data: 
+                u_data['inventory'] = []
+                needs_update = True
+                
+        if needs_update: save_db(db)
+        return db
+    except Exception as e:
+        return get_default_db()
+
+def save_db(data):
+    try:
+        app_state.update_one({"_id": "MAIN_DATA"}, {"$set": {"data": data}}, upsert=True)
+    except Exception as e:
+        print("DB 저장 실패:", e)
 
 # ==========================================================================================
 # 🎨 [FRONTEND] 마스터 UI 템플릿 (초대형 CSS 및 스크립트 결합)
