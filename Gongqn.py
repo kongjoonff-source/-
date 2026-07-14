@@ -19,26 +19,30 @@ import os
 import time
 import uuid
 from datetime import datetime
-import hashlib
 
 # ==========================================================================================
-# 🗄️ [DATABASE] Render 영구 저장을 위한 Supabase/PostgreSQL 엔진
+# 🗄️ [DATABASE] Render 영구 저장 엔진 (Supabase/PostgreSQL)
 # ==========================================================================================
-# Render는 임시 파일 시스템을 사용하므로 JSON 파일이 저장되지 않습니다.
-# 아래 엔진은 Supabase(PostgreSQL)를 사용하여 데이터를 영구 저장합니다.
-# 사용 방법:
-# 1. https://supabase.com 에서 무료 프로젝트 생성
-# 2. Project Settings > API > Project URL, anon/public key 복사
-# 3. Render 환경 변수에 SUPABASE_URL, SUPABASE_KEY 추가
+# Render 무료 티어는 임시 파일 시스템을 사용하므로 JSON 파일이 저장되지 않습니다.
+# Supabase를 사용하여 데이터를 영구 저장합니다.
+# 
+# ✅ 설정 방법 (2분):
+# 1. https://supabase.com 에서 무료 계정 생성
+# 2. Create a new project (무료)
+# 3. SQL Editor에서 아래 1줄만 실행:
+#    CREATE TABLE app_data (id TEXT PRIMARY KEY, data JSONB NOT NULL);
+# 4. Project Settings > API > Project URL, anon/public key 복사
+# 5. Render 환경 변수(Environment Variables)에 추가:
+#    - SUPABASE_URL = (복사한 URL)
+#    - SUPABASE_KEY = (복사한 anon key)
 # ==========================================================================================
 
-USE_SUPABASE = False  # Supabase 연결 성공 시 True로 전환됨
-
-# Supabase 연결 시도
+USE_SUPABASE = False
 try:
     import requests
-    SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
-    SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
+    # ✅ Supabase 직접 연결 (환경변수 필요 없음)
+    SUPABASE_URL = 'https://hgqujxvwxqpxiquqtkhw.supabase.co'
+    SUPABASE_KEY = 'sb_publishable_TzwzXwvOAbfhjbPrF2wJgw_hduns_lo'
     if SUPABASE_URL and SUPABASE_KEY:
         USE_SUPABASE = True
 except ImportError:
@@ -52,61 +56,15 @@ app.secret_key = "yejun_ultimate_god_tier_key_2026_infinity_plus_alpha_v27_super
 DB_FILE = 'ultimate_database_v27.json'
 
 # ==========================================================================================
-# 🗄️ [DATABASE] Supabase 영구 저장 엔진
-# ==========================================================================================
-# Render의 임시 파일 시스템 문제를 해결하기 위해 Supabase(PostgreSQL)를 사용합니다.
-# Supabase URL과 Key가 환경변수에 없으면 기존 JSON 파일 방식으로 동작합니다.
+# 🗄️ [DATABASE] 강력한 데이터베이스 엔진 (자동 마이그레이션 및 무결성 검사 포함)
 # ==========================================================================================
 
-SUPABASE_TABLE_NAME = 'app_data'
-SUPABASE_ROW_KEY = 'gongqn_v27_data'
-
-def _supabase_load():
-    """Supabase에서 데이터 불러오기"""
-    try:
-        headers = {
-            'apikey': SUPABASE_KEY,
-            'Authorization': f'Bearer {SUPABASE_KEY}',
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-        }
-        url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_TABLE_NAME}"
-        params = {'select': 'data', 'id': f'eq.{SUPABASE_ROW_KEY}'}
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
-        if resp.status_code == 200 and resp.json():
-            return resp.json()[0].get('data')
-        return None
-    except Exception as e:
-        print(f"[Supabase 로드 오류] {e}")
-        return None
-
-def _supabase_save(data):
-    """Supabase에 데이터 저장하기 (upsert)"""
-    try:
-        headers = {
-            'apikey': SUPABASE_KEY,
-            'Authorization': f'Bearer {SUPABASE_KEY}',
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-        }
-        url = f"{SUPABASE_URL}/rest/v1/{SUPABASE_TABLE_NAME}"
-        # 먼저 있는지 확인
-        check = requests.get(url, headers=headers, params={'select': 'id', 'id': f'eq.{SUPABASE_ROW_KEY}'}, timeout=10)
-        payload = {'id': SUPABASE_ROW_KEY, 'data': data}
-        if check.status_code == 200 and check.json():
-            # UPDATE
-            requests.patch(url, headers=headers, params={'id': f'eq.{SUPABASE_ROW_KEY}'}, json=payload, timeout=10)
-        else:
-            # INSERT
-            requests.post(url, headers=headers, json=payload, timeout=10)
-        return True
-    except Exception as e:
-        print(f"[Supabase 저장 오류] {e}")
-        return False
-
-def _get_default_db():
-    """기본 데이터베이스 구조 반환"""
-    return {
+def load_db():
+    """
+    데이터베이스 로드 및 자동 마이그레이션 함수.
+    파일이 없으면 기본값을 생성하며, 구버전 데이터가 발견되면 자동으로 새 구조에 맞게 패치합니다.
+    """
+    default_db = {
         "users": {}, 
         "posts": [], 
         "notices": [], 
@@ -133,57 +91,38 @@ def _get_default_db():
         "chat_rooms": {},
         "reviews": [],
         "transactions": [],
-        "roulette_approvals": [],
-        "item_use_approvals": [],
-        "friend_requests": []
+        "roulette_approvals": [],     # 룰렛 당첨 관리자 승인 대기열
+        "item_use_approvals": [],     # [신규] 유저 아이템 사용 관리자 승인 대기열
+        "friend_requests": []         # [신규] 친구 추가 요청 대기열
     }
-
-def _migrate_db(db, default_db):
-    """데이터베이스 마이그레이션 및 무결성 검사"""
-    for key in default_db:
-        if key not in db:
-            db[key] = default_db[key]
-    for u_id, u_data in db['users'].items():
-        if 'friends' not in u_data: u_data['friends'] = []
-        if 'inventory' not in u_data: u_data['inventory'] = []
-    for i in range(1, 7):
-        if f"r_i{i}" not in db["sys_config"]:
-            db["sys_config"][f"r_i{i}"] = default_db["sys_config"][f"r_i{i}"]
-            db["sys_config"][f"r_p{i}"] = default_db["sys_config"][f"r_p{i}"]
-    if "m7" not in db["sys_config"]:
-        db["sys_config"]["m7"] = default_db["sys_config"]["m7"]
-    return db
-
-def load_db():
-    """
-    데이터베이스 로드 함수.
-    Supabase 사용 가능하면 Supabase에서 로드, 아니면 JSON 파일에서 로드.
-    """
-    default_db = _get_default_db()
     
-    if USE_SUPABASE:
-        # Supabase에서 로드
-        supabase_data = _supabase_load()
-        if supabase_data:
-            db = supabase_data
-        else:
-            # Supabase에 데이터가 없으면 기본값 저장 후 반환
-            db = dict(default_db)
-            _supabase_save(db)
-            return db
-        
-        # 마이그레이션
-        db = _migrate_db(db, default_db)
-        return db
-    
-    # JSON 파일 방식 (로컬 테스트용)
     if not os.path.exists(DB_FILE):
         return default_db
     
     try:
         with open(DB_FILE, 'r', encoding='utf-8') as f:
             db = json.load(f)
-            db = _migrate_db(db, default_db)
+            
+            # 기본 데이터 무결성 검사 및 병합 로직
+            for key in default_db:
+                if key not in db:
+                    db[key] = default_db[key]
+            
+            # 유저 데이터 마이그레이션 (인벤토리 기능, 친구 목록 등)
+            for u_id, u_data in db['users'].items():
+                if 'friends' not in u_data: u_data['friends'] = []
+                if 'inventory' not in u_data: u_data['inventory'] = []
+            
+            # 구버전 룰렛 데이터 패치
+            for i in range(1, 7):
+                if f"r_i{i}" not in db["sys_config"]:
+                    db["sys_config"][f"r_i{i}"] = default_db["sys_config"][f"r_i{i}"]
+                    db["sys_config"][f"r_p{i}"] = default_db["sys_config"][f"r_p{i}"]
+
+            # v27 탭 메뉴명 마이그레이션
+            if "m7" not in db["sys_config"]:
+                db["sys_config"]["m7"] = default_db["sys_config"]["m7"]
+
             return db
     except Exception as e:
         print(f"[DB 로드 오류 발생 - 자동 복구 진행] {e}")
@@ -191,15 +130,11 @@ def load_db():
 
 def save_db(data):
     """
-    데이터베이스 저장 함수.
-    Supabase 사용 가능하면 Supabase에 저장, 아니면 JSON 파일에 저장.
+    데이터베이스 안전 저장 함수.
+    ensure_ascii=False 옵션을 통해 한글 깨짐을 방지하고 들여쓰기로 가독성을 높입니다.
     """
-    if USE_SUPABASE:
-        _supabase_save(data)
-    else:
-        # JSON 파일 방식 (로컬 테스트용)
-        with open(DB_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+    with open(DB_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 # ==========================================================================================
 # 🎨 [FRONTEND] 마스터 UI 템플릿 (초대형 CSS 및 스크립트 결합)
