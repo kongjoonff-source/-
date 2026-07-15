@@ -50,7 +50,7 @@ DB_DIR = os.environ.get("PERSISTENT_DIR", ".")
 DB_NAME = os.path.join(DB_DIR, "donations_secure.db")
 
 # 🛑 [중요] 여기에 너의 Pushbullet Access Token을 붙여넣으세요!
-PUSHBULLET_API_KEY = os.environ.get("o.P9LtMvpDoNgYXOLogbiPsuIvZc95P2nY")
+PUSHBULLET_API_KEY = os.environ.get("PUSHBULLET_API_KEY", "o.P9LtMvpDoNgYXOLogbiPsuIvZc95P2nY")
 
 # 관리자 페이지 기본 비밀번호
 ADMIN_PASSWORD = "zizer731!!"  # 필요 시 다른 비밀번호로 수정 가능
